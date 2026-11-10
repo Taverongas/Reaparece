@@ -10,6 +10,7 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<UsuarioStore>();
+builder.Services.AddSingleton<ComunidadStore>();
 
 builder.Services.AddCors(options =>
     options.AddPolicy(PoliticaFrontend, policy =>

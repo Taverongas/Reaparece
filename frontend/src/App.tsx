@@ -2,21 +2,23 @@ import { useState } from 'react'
 import Login from './pages/Login'
 import Perfil from './pages/Perfil'
 import Registro from './pages/Registro'
-import type { Usuario } from './services/api'
+import { cerrarSesion, type Sesion } from './services/api'
 
 type PantallaPublica = 'login' | 'registro'
 
 export default function App() {
   // La sesión vive solo en memoria: al recargar la página hay que volver a ingresar.
-  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [sesion, setSesion] = useState<Sesion | null>(null)
   const [pantalla, setPantalla] = useState<PantallaPublica>('login')
 
-  if (usuario) {
+  if (sesion) {
     return (
       <Perfil
-        usuario={usuario}
+        sesion={sesion}
         onCerrarSesion={() => {
-          setUsuario(null)
+          // Si el backend no responde igual salimos: el token expira solo en 2 horas.
+          cerrarSesion(sesion.token).catch(() => {})
+          setSesion(null)
           setPantalla('login')
         }}
       />
@@ -24,8 +26,8 @@ export default function App() {
   }
 
   return pantalla === 'login' ? (
-    <Login onIngreso={setUsuario} onIrARegistro={() => setPantalla('registro')} />
+    <Login onIngreso={setSesion} onIrARegistro={() => setPantalla('registro')} />
   ) : (
-    <Registro onRegistro={setUsuario} onIrALogin={() => setPantalla('login')} />
+    <Registro onRegistro={setSesion} onIrALogin={() => setPantalla('login')} />
   )
 }

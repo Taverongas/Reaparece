@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import Encabezado from '../components/Encabezado'
 import { Campo, MensajeError, claseBoton, claseInput } from '../components/formulario'
-import { ApiError, iniciarSesion, type Usuario } from '../services/api'
+import { ApiError, iniciarSesion, type Sesion } from '../services/api'
 
 interface Props {
-  onIngreso: (usuario: Usuario) => void
+  onIngreso: (sesion: Sesion) => void
   onIrARegistro: () => void
 }
 

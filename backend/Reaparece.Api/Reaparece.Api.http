@@ -1,5 +1,6 @@
 @Reaparece.Api_HostAddress = http://localhost:5062
 
+### REAP-2: registro
 POST {{Reaparece.Api_HostAddress}}/api/auth/registro
 Content-Type: application/json
 
@@ -12,8 +13,7 @@ Content-Type: application/json
   "aceptaHabeasData": true
 }
 
-###
-
+### REAP-3: login (copia el "token" de la respuesta en @token)
 POST {{Reaparece.Api_HostAddress}}/api/auth/login
 Content-Type: application/json
 
@@ -23,8 +23,46 @@ Content-Type: application/json
 }
 
 ###
+@token = pega-aqui-el-token
 
-GET {{Reaparece.Api_HostAddress}}/api/usuarios/1/perfil
-Accept: application/json
+### REAP-6: perfil (sin token responde 401)
+GET {{Reaparece.Api_HostAddress}}/api/perfil
+Authorization: Bearer {{token}}
+
+### Cerrar sesión
+POST {{Reaparece.Api_HostAddress}}/api/auth/logout
+Authorization: Bearer {{token}}
 
 ###
+
+### REAP-4: listar comunidades (indica en cuáles ya eres miembro)
+GET {{Reaparece.Api_HostAddress}}/api/comunidades
+Authorization: Bearer {{token}}
+
+### REAP-5: crear comunidad privada (la respuesta trae el codigoInvitacion)
+POST {{Reaparece.Api_HostAddress}}/api/comunidades
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nombre": "Club de Lectura EIA",
+  "categoria": "Universidad",
+  "descripcion": "Libros y apuntes olvidados en la biblioteca.",
+  "esPrivada": true
+}
+
+### REAP-4: unirse a una comunidad pública (Metro de Medellín)
+POST {{Reaparece.Api_HostAddress}}/api/comunidades/2/unirse
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### REAP-4: unirse a una comunidad privada con su código
+POST {{Reaparece.Api_HostAddress}}/api/comunidades/5/unirse
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "codigoInvitacion": "PEGA-EL-CODIGO"
+}

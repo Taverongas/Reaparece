@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Reaparece.Api.Models;
 
 namespace Reaparece.Api.Services;
@@ -5,16 +6,18 @@ namespace Reaparece.Api.Services;
 public enum ResultadoLogin { Exitoso, CredencialesInvalidas, Bloqueado }
 
 /// <summary>
-/// Almacén de usuarios en memoria. Se registra como singleton y se reemplazará por PostgreSQL.
+/// Almacén de usuarios y sesiones en memoria. Se registra como singleton y se reemplazará por PostgreSQL.
 /// </summary>
 public class UsuarioStore
 {
     public const int MaxIntentosFallidos = 3;
     public static readonly TimeSpan DuracionBloqueo = TimeSpan.FromMinutes(15);
+    public static readonly TimeSpan DuracionSesion = TimeSpan.FromHours(2);
 
     private readonly List<Usuario> _usuarios = [];
     // Los intentos se cuentan por correo aunque el correo no exista, para no revelar qué cuentas están registradas.
     private readonly Dictionary<string, (int Fallidos, DateTime? BloqueadoHasta)> _intentos = [];
+    private readonly Dictionary<string, (int UsuarioId, DateTime ExpiraEn)> _sesiones = [];
     private readonly Lock _lock = new();
     private readonly TimeProvider _reloj;
     private int _siguienteId = 1;
@@ -24,7 +27,7 @@ public class UsuarioStore
         _reloj = reloj;
 
         var prueba = Crear("Jerónimo Tavera", "jeronimo@eia.edu.co", "Reaparece123", comunidadPrincipalId: 1);
-        prueba.ComunidadIds.Add(2);
+        prueba.ComunidadIds.Add(4); // Barrio El Poblado: no verificada, para mostrar ambos sellos en el perfil.
         prueba.Reputacion = 4.6;
         prueba.ObjetosPublicados = 7;
         prueba.ObjetosRecuperados = 4;
@@ -33,20 +36,14 @@ public class UsuarioStore
 
     public static string NormalizarCorreo(string correo) => correo.Trim().ToLowerInvariant();
 
+    private DateTime Ahora => _reloj.GetUtcNow().UtcDateTime;
+
     public Usuario? BuscarPorCorreo(string correo)
     {
         var normalizado = NormalizarCorreo(correo);
         lock (_lock)
         {
             return _usuarios.FirstOrDefault(u => u.Correo == normalizado);
-        }
-    }
-
-    public Usuario? BuscarPorId(int id)
-    {
-        lock (_lock)
-        {
-            return _usuarios.FirstOrDefault(u => u.Id == id);
         }
     }
 
@@ -62,10 +59,14 @@ public class UsuarioStore
         }
     }
 
+    /// <summary>
+    /// Verifica las credenciales. Al tercer fallo seguido con el mismo correo bloquea ese correo
+    /// por 15 minutos y devuelve <see cref="ResultadoLogin.Bloqueado"/> desde ese mismo intento.
+    /// </summary>
     public (ResultadoLogin Resultado, Usuario? Usuario, DateTime? BloqueadoHasta) ValidarCredenciales(string correo, string contrasena)
     {
         var normalizado = NormalizarCorreo(correo);
-        var ahora = _reloj.GetUtcNow().UtcDateTime;
+        var ahora = Ahora;
 
         lock (_lock)
         {
@@ -88,9 +89,81 @@ public class UsuarioStore
             }
 
             var fallidos = intento.Fallidos + 1;
-            DateTime? bloqueadoHasta = fallidos >= MaxIntentosFallidos ? ahora + DuracionBloqueo : null;
-            _intentos[normalizado] = (fallidos, bloqueadoHasta);
+            if (fallidos >= MaxIntentosFallidos)
+            {
+                var bloqueadoHasta = ahora + DuracionBloqueo;
+                _intentos[normalizado] = (fallidos, bloqueadoHasta);
+                return (ResultadoLogin.Bloqueado, null, bloqueadoHasta);
+            }
+
+            _intentos[normalizado] = (fallidos, null);
             return (ResultadoLogin.CredencialesInvalidas, null, null);
+        }
+    }
+
+    /// <summary>Agrega la comunidad al usuario. Devuelve false si ya pertenecía a ella.</summary>
+    public bool TryUnirse(Usuario usuario, int comunidadId)
+    {
+        lock (_lock)
+        {
+            if (usuario.ComunidadIds.Contains(comunidadId))
+                return false;
+
+            usuario.ComunidadIds.Add(comunidadId);
+            return true;
+        }
+    }
+
+    public bool EsMiembro(Usuario usuario, int comunidadId)
+    {
+        lock (_lock)
+        {
+            return usuario.ComunidadIds.Contains(comunidadId);
+        }
+    }
+
+    public int ContarMiembros(int comunidadId)
+    {
+        lock (_lock)
+        {
+            return _usuarios.Count(u => u.ComunidadIds.Contains(comunidadId));
+        }
+    }
+
+    public (string Token, DateTime ExpiraEn) GenerarToken(Usuario usuario)
+    {
+        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var expiraEn = Ahora + DuracionSesion;
+        lock (_lock)
+        {
+            _sesiones[token] = (usuario.Id, expiraEn);
+        }
+        return (token, expiraEn);
+    }
+
+    /// <summary>Devuelve el usuario dueño del token, o null si no existe o ya expiró.</summary>
+    public Usuario? ValidarToken(string token)
+    {
+        lock (_lock)
+        {
+            if (!_sesiones.TryGetValue(token, out var sesion))
+                return null;
+
+            if (sesion.ExpiraEn <= Ahora)
+            {
+                _sesiones.Remove(token);
+                return null;
+            }
+
+            return _usuarios.FirstOrDefault(u => u.Id == sesion.UsuarioId);
+        }
+    }
+
+    public void RevocarToken(string token)
+    {
+        lock (_lock)
+        {
+            _sesiones.Remove(token);
         }
     }
 

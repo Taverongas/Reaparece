@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import Encabezado from '../components/Encabezado'
 import { claseBoton } from '../components/formulario'
-import { ApiError, obtenerPerfil, type Perfil as PerfilDatos, type Usuario } from '../services/api'
+import { ApiError, obtenerPerfil, type Perfil as PerfilDatos, type Sesion } from '../services/api'
 
 interface Props {
-  usuario: Usuario
+  sesion: Sesion
   onCerrarSesion: () => void
 }
 
@@ -26,15 +26,16 @@ function Contador({ valor, etiqueta }: { valor: number; etiqueta: string }) {
   )
 }
 
-export default function Perfil({ usuario, onCerrarSesion }: Props) {
+export default function Perfil({ sesion, onCerrarSesion }: Props) {
+  const { usuario, token } = sesion
   const [perfil, setPerfil] = useState<PerfilDatos | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    obtenerPerfil(usuario.id)
+    obtenerPerfil(token)
       .then(setPerfil)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'No pudimos cargar tu perfil.'))
-  }, [usuario.id])
+  }, [token])
 
   return (
     <div className="min-h-svh">
